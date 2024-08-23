@@ -1,17 +1,24 @@
 <?php
 /*
-Plugin Name: Auto Internal Linking
-Description: Automates and simplifies internal linking to boost SEO with word usage analysis and link diagram.
-Version: 3.2
-Author: Your Name
-*/
+ * Plugin Name:             WordPress Internal Linking
+ * Plugin URI:              https://github.com/Open-WP-Club/wp-internal-linking
+ * Description:             
+ * Version:                 0.0.1
+ * Author:                  Gabriel Kanev
+ * Author URI:              https://gkanev.com
+ * License:                 GPL-2.0 License
+ * Requires Plugins:        
+ * Requires at least:       6.0
+ * Requires PHP:            7.4
+ * Tested up to:            6.6.1
+ */
 
 // Don't allow direct access to the plugin file
 if (!defined('ABSPATH')) {
     exit;
 }
 
-class Auto_Internal_Linking
+class Internal_Linking
 {
     private $options;
     private $blacklist;
@@ -25,7 +32,7 @@ class Auto_Internal_Linking
         add_action('wp_ajax_generate_link_diagram', array($this, 'generate_link_diagram'));
         add_action('wp_ajax_analyze_all_content', array($this, 'analyze_all_content'));
 
-        $this->options = get_option('auto_internal_linking_options');
+        $this->options = get_option('internal_linking_options');
         $this->blacklist = $this->get_blacklist();
     }
 
@@ -42,10 +49,10 @@ class Auto_Internal_Linking
     {
         add_submenu_page(
             'tools.php',
-            'Auto Internal Linking',
-            'Auto Internal Linking',
+            'Internal Linking',
+            'Internal Linking',
             'manage_options',
-            'auto-internal-linking',
+            'internal-linking',
             array($this, 'create_main_page')
         );
     }
@@ -54,11 +61,11 @@ class Auto_Internal_Linking
     {
 ?>
         <div class="wrap">
-            <h1>Auto Internal Linking</h1>
+            <h1>Internal Linking</h1>
             <h2 class="nav-tab-wrapper">
-                <a href="?page=auto-internal-linking" class="nav-tab <?php echo ($_GET['page'] === 'auto-internal-linking' && !isset($_GET['tab'])) ? 'nav-tab-active' : ''; ?>">Overview</a>
-                <a href="?page=auto-internal-linking&tab=word-usage" class="nav-tab <?php echo (isset($_GET['tab']) && $_GET['tab'] === 'word-usage') ? 'nav-tab-active' : ''; ?>">Word Usage</a>
-                <a href="?page=auto-internal-linking&tab=link-diagram" class="nav-tab <?php echo (isset($_GET['tab']) && $_GET['tab'] === 'link-diagram') ? 'nav-tab-active' : ''; ?>">Link Diagram</a>
+                <a href="?page=internal-linking" class="nav-tab <?php echo ($_GET['page'] === 'internal-linking' && !isset($_GET['tab'])) ? 'nav-tab-active' : ''; ?>">Overview</a>
+                <a href="?page=internal-linking&tab=word-usage" class="nav-tab <?php echo (isset($_GET['tab']) && $_GET['tab'] === 'word-usage') ? 'nav-tab-active' : ''; ?>">Word Usage</a>
+                <a href="?page=internal-linking&tab=link-diagram" class="nav-tab <?php echo (isset($_GET['tab']) && $_GET['tab'] === 'link-diagram') ? 'nav-tab-active' : ''; ?>">Link Diagram</a>
             </h2>
             <?php
             $tab = isset($_GET['tab']) ? $_GET['tab'] : '';
@@ -80,8 +87,52 @@ class Auto_Internal_Linking
 
     public function create_overview_page()
     {
+        // Get the stored analysis data
+        $stored_analysis = get_option('internal_linking_analysis', array());
+
+        // Calculate statistics
+        $total_words = count($stored_analysis);
+        $total_content_items = 0;
+        $content_types = array();
+
+        foreach ($stored_analysis as $word => $content_items) {
+            $total_content_items += count($content_items);
+            foreach ($content_items as $item) {
+                if (!isset($content_types[$item['type']])) {
+                    $content_types[$item['type']] = 0;
+                }
+                $content_types[$item['type']]++;
+            }
+        }
+
     ?>
-        <p>Welcome to Auto Internal Linking. Use the tabs above to view word usage across your content and the internal link diagram.</p>
+        <h3>Иnternal Linking Overview</h3>
+        <p>Welcome to Internal Linking. Here are some statistics about your content:</p>
+        <table class="wp-list-table widefat fixed striped">
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Total analyzed words</strong></td>
+                    <td><?php echo $total_words; ?></td>
+                </tr>
+                <tr>
+                    <td><strong>Total content items linked</strong></td>
+                    <td><?php echo $total_content_items; ?></td>
+                </tr>
+                <?php foreach ($content_types as $type => $count): ?>
+                    <tr>
+                        <td><strong><?php echo ucfirst($type) . 's linked'; ?></strong></td>
+                        <td><?php echo $count; ?></td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+        <p>Use the tabs above to view detailed word usage across your content and the internal link diagram.</p>
     <?php
     }
 
@@ -92,7 +143,7 @@ class Auto_Internal_Linking
         <button id="analyze-all-content" class="button button-primary">Analyze All Content</button>
         <div id="analysis-results">
             <?php
-            $stored_analysis = get_option('auto_internal_linking_analysis');
+            $stored_analysis = get_option('internal_linking_analysis');
             if ($stored_analysis) {
                 echo $this->generate_analysis_table($stored_analysis);
             } else {
@@ -115,8 +166,8 @@ class Auto_Internal_Linking
     public function page_init()
     {
         register_setting(
-            'auto_internal_linking_option_group',
-            'auto_internal_linking_options',
+            'internal_linking_option_group',
+            'internal_linking_options',
             array($this, 'sanitize')
         );
     }
@@ -128,11 +179,11 @@ class Auto_Internal_Linking
 
     public function enqueue_admin_scripts($hook)
     {
-        if ($hook == 'tools_page_auto-internal-linking') {
+        if ($hook == 'tools_page_internal-linking') {
             wp_enqueue_script('mermaid', 'https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js', array(), '8.13.10', true);
-            wp_enqueue_script('auto-internal-linking-admin', plugins_url('js/admin.js', __FILE__), array('jquery'), '1.0', true);
-            wp_enqueue_script('auto-internal-linking-diagram', plugins_url('js/diagram.js', __FILE__), array('jquery', 'mermaid'), '1.0', true);
-            wp_localize_script('auto-internal-linking-admin', 'ailAjax', array('ajaxurl' => admin_url('admin-ajax.php')));
+            wp_enqueue_script('internal-linking-admin', plugins_url('js/admin.js', __FILE__), array('jquery'), '1.0', true);
+            wp_enqueue_script('internal-linking-diagram', plugins_url('js/diagram.js', __FILE__), array('jquery', 'mermaid'), '1.0', true);
+            wp_localize_script('internal-linking-admin', 'ailAjax', array('ajaxurl' => admin_url('admin-ajax.php')));
         }
     }
 
@@ -224,7 +275,7 @@ class Auto_Internal_Linking
             }
         }
 
-        update_option('auto_internal_linking_analysis', $word_usage);
+        update_option('internal_linking_analysis', $word_usage);
 
         $table_html = $this->generate_analysis_table($word_usage);
         wp_send_json_success($table_html);
@@ -344,10 +395,10 @@ class Auto_Internal_Linking
 }
 
 // Instantiate the class
-function run_auto_internal_linking()
+function run_internal_linking()
 {
-    $plugin = new Auto_Internal_Linking();
+    $plugin = new Internal_Linking();
 }
 
 // Hook to WordPress init action
-add_action('init', 'run_auto_internal_linking');
+add_action('init', 'run_internal_linking');
