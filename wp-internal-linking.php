@@ -2,7 +2,7 @@
 /*
 Plugin Name: Auto Internal Linking
 Description: Automates and simplifies internal linking to boost SEO with word usage analysis and link diagram.
-Version: 3.1
+Version: 3.2
 Author: Your Name
 */
 
@@ -14,6 +14,7 @@ if (!defined('ABSPATH')) {
 class Auto_Internal_Linking
 {
     private $options;
+    private $blacklist;
 
     public function __construct()
     {
@@ -22,9 +23,19 @@ class Auto_Internal_Linking
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
         add_filter('the_content', array($this, 'add_internal_links'));
         add_action('wp_ajax_generate_link_diagram', array($this, 'generate_link_diagram'));
-        add_action('wp_ajax_analyze_all_posts', array($this, 'analyze_all_posts'));
+        add_action('wp_ajax_analyze_all_content', array($this, 'analyze_all_content'));
 
         $this->options = get_option('auto_internal_linking_options');
+        $this->blacklist = $this->get_blacklist();
+    }
+
+    private function get_blacklist()
+    {
+        $blacklist_file = plugin_dir_path(__FILE__) . 'blacklist.php';
+        if (file_exists($blacklist_file)) {
+            return include $blacklist_file;
+        }
+        return array(); // Return an empty array if the file doesn't exist
     }
 
     public function add_plugin_pages()
@@ -70,7 +81,7 @@ class Auto_Internal_Linking
     public function create_overview_page()
     {
     ?>
-        <p>Welcome to Auto Internal Linking. Use the tabs above to view word usage across your posts and the internal link diagram.</p>
+        <p>Welcome to Auto Internal Linking. Use the tabs above to view word usage across your content and the internal link diagram.</p>
     <?php
     }
 
@@ -78,9 +89,16 @@ class Auto_Internal_Linking
     {
     ?>
         <h3>Word Usage Analysis</h3>
-        <button id="analyze-all-posts" class="button button-primary">Analyze All Posts</button>
+        <button id="analyze-all-content" class="button button-primary">Analyze All Content</button>
         <div id="analysis-results">
-            <p>Click the button above to start the analysis.</p>
+            <?php
+            $stored_analysis = get_option('auto_internal_linking_analysis');
+            if ($stored_analysis) {
+                echo $this->generate_analysis_table($stored_analysis);
+            } else {
+                echo '<p>No analysis data available. Click the button above to start the analysis.</p>';
+            }
+            ?>
         </div>
     <?php
     }
@@ -121,6 +139,8 @@ class Auto_Internal_Linking
     public function get_all_words()
     {
         global $wpdb;
+        $blacklist_pattern = implode('|', array_map('preg_quote', $this->blacklist));
+
         $words = $wpdb->get_col("
             SELECT DISTINCT LOWER(word) word FROM (
                 SELECT SUBSTRING_INDEX(SUBSTRING_INDEX(REPLACE(REPLACE(REPLACE(LOWER(post_content), ',' , ' '), '.', ' '), '!', ' '), ' ', n.n), ' ', -1) word
@@ -132,30 +152,104 @@ class Auto_Internal_Linking
                     ORDER BY n
                 ) n
                 WHERE n.n <= 1 + (LENGTH(post_content) - LENGTH(REPLACE(post_content, ' ', '')))
-                AND post_type = 'post' AND post_status = 'publish'
+                AND (post_type = 'post' OR post_type = 'page') AND post_status = 'publish'
             ) words
             WHERE LENGTH(word) > 3
+            AND word NOT REGEXP '{$blacklist_pattern}'
             ORDER BY word
         ");
+
         return $words;
     }
 
-    private function find_pages_for_word($word)
+    private function find_content_for_word($word)
     {
         $args = array(
-            'post_type' => 'post',
+            'post_type' => array('post', 'page'),
             'post_status' => 'publish',
             'posts_per_page' => -1,
             's' => $word,
         );
 
         $query = new WP_Query($args);
-        return $query->posts;
+        $content = array();
+
+        foreach ($query->posts as $post) {
+            $content[] = array(
+                'id' => $post->ID,
+                'title' => $post->post_title,
+                'url' => get_permalink($post->ID),
+                'type' => $post->post_type
+            );
+        }
+
+        // Add categories
+        $categories = get_categories(array('hide_empty' => false, 'name__like' => $word));
+        foreach ($categories as $category) {
+            $content[] = array(
+                'id' => $category->term_id,
+                'title' => $category->name,
+                'url' => get_category_link($category->term_id),
+                'type' => 'category'
+            );
+        }
+
+        // Add tags
+        $tags = get_tags(array('hide_empty' => false, 'name__like' => $word));
+        foreach ($tags as $tag) {
+            $content[] = array(
+                'id' => $tag->term_id,
+                'title' => $tag->name,
+                'url' => get_tag_link($tag->term_id),
+                'type' => 'tag'
+            );
+        }
+
+        return $content;
+    }
+
+    public function analyze_all_content()
+    {
+        if (!current_user_can('manage_options')) {
+            wp_die('Unauthorized user');
+        }
+
+        $words = $this->get_all_words();
+        $word_usage = array();
+
+        foreach ($words as $word) {
+            $content = $this->find_content_for_word($word);
+            if (!empty($content)) {
+                $word_usage[$word] = $content;
+            }
+        }
+
+        update_option('auto_internal_linking_analysis', $word_usage);
+
+        $table_html = $this->generate_analysis_table($word_usage);
+        wp_send_json_success($table_html);
+    }
+
+    private function generate_analysis_table($word_usage)
+    {
+        $html = '<table class="wp-list-table widefat fixed striped">';
+        $html .= '<thead><tr><th>Word</th><th>Content</th></tr></thead><tbody>';
+
+        foreach ($word_usage as $word => $content_items) {
+            $html .= '<tr><td>' . esc_html($word) . '</td><td>';
+            foreach ($content_items as $item) {
+                $html .= '<a href="' . esc_url($item['url']) . '">' . esc_html($item['title']) . '</a> (' . esc_html($item['type']) . ')<br>';
+            }
+            $html .= '</td></tr>';
+        }
+
+        $html .= '</tbody></table>';
+        return $html;
     }
 
     public function add_internal_links($content)
     {
-        if (!is_singular('post')) {
+        if (!is_singular(array('post', 'page'))) {
             return $content;
         }
 
@@ -173,7 +267,7 @@ class Auto_Internal_Linking
     private function find_post_for_word($word)
     {
         $args = array(
-            'post_type' => 'post',
+            'post_type' => array('post', 'page'),
             'post_status' => 'publish',
             'posts_per_page' => 1,
             's' => $word,
@@ -199,55 +293,29 @@ class Auto_Internal_Linking
         $diagram = "graph LR\n";
 
         $word_nodes = array();
-        $post_nodes = array();
+        $content_nodes = array();
 
         foreach ($words as $word) {
-            $post_id = $this->find_post_for_word($word);
-            if ($post_id) {
-                $post_title = get_the_title($post_id);
+            $content_items = $this->find_content_for_word($word);
+            if (!empty($content_items)) {
                 $word_node = 'word_' . md5($word);
-                $post_node = 'post_' . $post_id;
-
                 if (!in_array($word_node, $word_nodes)) {
                     $diagram .= "    {$word_node}[\"" . esc_html($word) . "\"]\n";
                     $word_nodes[] = $word_node;
                 }
 
-                if (!in_array($post_node, $post_nodes)) {
-                    $diagram .= "    {$post_node}[\"" . esc_html($post_title) . "\"]\n";
-                    $post_nodes[] = $post_node;
+                foreach ($content_items as $item) {
+                    $content_node = 'content_' . $item['type'] . '_' . $item['id'];
+                    if (!in_array($content_node, $content_nodes)) {
+                        $diagram .= "    {$content_node}[\"" . esc_html($item['title']) . " (" . esc_html($item['type']) . ")\"]\n";
+                        $content_nodes[] = $content_node;
+                    }
+                    $diagram .= "    {$word_node} --> {$content_node}\n";
                 }
-
-                $diagram .= "    {$word_node} --> {$post_node}\n";
             }
         }
 
         wp_send_json_success($diagram);
-    }
-
-    public function analyze_all_posts()
-    {
-        if (!current_user_can('manage_options')) {
-            wp_die('Unauthorized user');
-        }
-
-        $words = $this->get_all_words();
-        $word_usage = array();
-
-        foreach ($words as $word) {
-            $pages = $this->find_pages_for_word($word);
-            if (!empty($pages)) {
-                $word_usage[$word] = array_map(function ($page) {
-                    return array(
-                        'id' => $page->ID,
-                        'title' => $page->post_title,
-                        'url' => get_permalink($page->ID)
-                    );
-                }, $pages);
-            }
-        }
-
-        wp_send_json_success($word_usage);
     }
 }
 
