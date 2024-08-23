@@ -290,32 +290,56 @@ class Auto_Internal_Linking
         }
 
         $words = $this->get_all_words();
-        $diagram = "graph LR\n";
+        $diagram = "graph TD\n";
 
         $word_nodes = array();
         $content_nodes = array();
+        $connections = array();
 
         foreach ($words as $word) {
             $content_items = $this->find_content_for_word($word);
             if (!empty($content_items)) {
                 $word_node = 'word_' . md5($word);
                 if (!in_array($word_node, $word_nodes)) {
-                    $diagram .= "    {$word_node}[\"" . esc_html($word) . "\"]\n";
-                    $word_nodes[] = $word_node;
+                    $escaped_word = $this->escape_mermaid_label($word);
+                    if (!empty($escaped_word)) {
+                        $diagram .= "    {$word_node}[\"{$escaped_word}\"]\n";
+                        $word_nodes[] = $word_node;
+                    }
                 }
 
                 foreach ($content_items as $item) {
                     $content_node = 'content_' . $item['type'] . '_' . $item['id'];
                     if (!in_array($content_node, $content_nodes)) {
-                        $diagram .= "    {$content_node}[\"" . esc_html($item['title']) . " (" . esc_html($item['type']) . ")\"]\n";
-                        $content_nodes[] = $content_node;
+                        $escaped_title = $this->escape_mermaid_label($item['title']);
+                        if (!empty($escaped_title)) {
+                            $diagram .= "    {$content_node}[\"{$escaped_title}\"]\n";
+                            $content_nodes[] = $content_node;
+                            $connections[] = "    {$content_node} --- {$word_node}\n";
+                        }
                     }
-                    $diagram .= "    {$word_node} --> {$content_node}\n";
                 }
             }
         }
 
+        $diagram .= implode("", array_unique($connections));
+
         wp_send_json_success($diagram);
+    }
+
+    private function escape_mermaid_label($text)
+    {
+        // Remove HTML entities
+        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        // Remove any characters that might interfere with Mermaid syntax
+        $text = preg_replace('/[\\\\\'\"]/u', '', $text);
+        // Limit length to prevent overly long labels
+        $text = mb_substr($text, 0, 30);
+        if (mb_strlen($text) >= 30) {
+            $text .= '...';
+        }
+        // Ensure the label is not empty
+        return !empty($text) ? $text : 'Unnamed';
     }
 }
 
