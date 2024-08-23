@@ -1,8 +1,15 @@
 jQuery(document).ready(function ($) {
-  mermaid.initialize({ startOnLoad: false });
+  // Initialize mermaid
+  mermaid.initialize({ startOnLoad: true, theme: "default" });
 
   $("#generate-diagram").on("click", function (e) {
     e.preventDefault();
+    var $button = $(this);
+    var $diagram = $("#link-diagram");
+
+    $button.prop("disabled", true).text("Generating...");
+    $diagram.html("<p>Generating diagram. This may take a few moments...</p>");
+
     $.ajax({
       url: ailAjax.ajaxurl,
       type: "POST",
@@ -12,16 +19,22 @@ jQuery(document).ready(function ($) {
       success: function (response) {
         if (response.success) {
           var diagram = response.data;
-          var insertSvg = function (svgCode, bindFunctions) {
-            $("#link-diagram").html(svgCode);
-          };
-          mermaid.render("mermaid-diagram", diagram, insertSvg);
+          // Clear previous diagram
+          $diagram.empty();
+          // Create a new div for the diagram
+          var diagramContainer = $('<div class="mermaid">').text(diagram);
+          $diagram.append(diagramContainer);
+          // Render the new diagram
+          mermaid.init(undefined, $(".mermaid"));
         } else {
-          alert("Failed to generate diagram");
+          $diagram.html("<p>Failed to generate diagram. Please try again.</p>");
         }
       },
       error: function () {
-        alert("An error occurred. Please try again.");
+        $diagram.html("<p>An error occurred. Please try again.</p>");
+      },
+      complete: function () {
+        $button.prop("disabled", false).text("Generate Diagram");
       },
     });
   });
