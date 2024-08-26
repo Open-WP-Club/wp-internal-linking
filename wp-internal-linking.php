@@ -34,6 +34,7 @@ class Internal_Linking
 
         $this->options = get_option('internal_linking_options');
         $this->blacklist = $this->get_blacklist();
+        $this->add_ajax_handlers();
     }
 
     private function get_blacklist()
@@ -59,7 +60,7 @@ class Internal_Linking
 
     public function create_main_page()
     {
-?>
+    ?>
         <div class="wrap">
             <h1>Internal Linking</h1>
             <h2 class="nav-tab-wrapper">
@@ -105,8 +106,10 @@ class Internal_Linking
             }
         }
 
+        // Get blacklist statistics
+        $blacklist_count = count($this->blacklist);
     ?>
-        <h3>Иnternal Linking Overview</h3>
+        <h3>Internal Linking Overview</h3>
         <p>Welcome to Internal Linking. Here are some statistics about your content:</p>
         <table class="wp-list-table widefat fixed striped">
             <thead>
@@ -130,8 +133,26 @@ class Internal_Linking
                         <td><?php echo $count; ?></td>
                     </tr>
                 <?php endforeach; ?>
+                <tr>
+                    <td><strong>Blacklisted words</strong></td>
+                    <td><?php echo $blacklist_count; ?></td>
+                </tr>
             </tbody>
         </table>
+        
+        <h4>Manage Blacklist</h4>
+        <div id="blacklist-manager">
+            <ul>
+                <?php foreach ($this->blacklist as $word): ?>
+                    <li>
+                        <?php echo esc_html($word); ?>
+                        <button class="remove-blacklist-word" data-word="<?php echo esc_attr($word); ?>">Remove</button>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+            <input type="text" id="new-blacklist-word" placeholder="Add new word">
+            <button id="add-blacklist-word">Add to Blacklist</button>
+        </div>
         <p>Use the tabs above to view detailed word usage across your content and the internal link diagram.</p>
     <?php
     }
@@ -160,7 +181,10 @@ class Internal_Linking
         <h3>Internal Link Diagram</h3>
         <div id="link-diagram"></div>
         <button id="generate-diagram" class="button button-primary">Generate Diagram</button>
-<?php
+        <button id="delete-diagram" class="button">Delete Diagram</button>
+        <button id="download-diagram" class="button">Download as PNG</button>
+        <button id="download-svg" class="button">Download as SVG</button>
+    <?php
     }
 
     public function page_init()
@@ -181,8 +205,9 @@ class Internal_Linking
     {
         if ($hook == 'tools_page_internal-linking') {
             wp_enqueue_script('mermaid', 'https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js', array(), '8.13.10', true);
+            wp_enqueue_script('file-saver', 'https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.0/FileSaver.min.js', array(), '2.0.0', true);
             wp_enqueue_script('internal-linking-admin', plugins_url('js/admin.js', __FILE__), array('jquery'), '1.0', true);
-            wp_enqueue_script('internal-linking-diagram', plugins_url('js/diagram.js', __FILE__), array('jquery', 'mermaid'), '1.0', true);
+            wp_enqueue_script('internal-linking-diagram', plugins_url('js/diagram.js', __FILE__), array('jquery', 'mermaid', 'file-saver'), '1.0', true);
             wp_localize_script('internal-linking-admin', 'ailAjax', array('ajaxurl' => admin_url('admin-ajax.php')));
         }
     }
@@ -207,6 +232,7 @@ class Internal_Linking
             ) words
             WHERE LENGTH(word) > 3
             AND word NOT REGEXP '{$blacklist_pattern}'
+            AND word REGEXP '^[a-zA-Z]+$'
             ORDER BY word
         ");
 
@@ -391,6 +417,45 @@ class Internal_Linking
         }
         // Ensure the label is not empty
         return !empty($text) ? $text : 'Unnamed';
+    }
+
+    public function add_ajax_handlers()
+    {
+        add_action('wp_ajax_add_blacklist_word', array($this, 'ajax_add_blacklist_word'));
+        add_action('wp_ajax_remove_blacklist_word', array($this, 'ajax_remove_blacklist_word'));
+    }
+
+    public function ajax_add_blacklist_word()
+    {
+        if (!current_user_can('manage_options')) {
+            wp_die('Unauthorized user');
+        }
+
+        $word = sanitize_text_field($_POST['word']);
+        if (!in_array($word, $this->blacklist)) {
+            $this->blacklist[] = $word;
+            update_option('internal_linking_blacklist', $this->blacklist);
+            wp_send_json_success();
+        } else {
+            wp_send_json_error('Word already in blacklist');
+        }
+    }
+
+    public function ajax_remove_blacklist_word()
+    {
+        if (!current_user_can('manage_options')) {
+            wp_die('Unauthorized user');
+        }
+
+        $word = sanitize_text_field($_POST['word']);
+        $key = array_search($word, $this->blacklist);
+        if ($key !== false) {
+            unset($this->blacklist[$key]);
+            update_option('internal_linking_blacklist', array_values($this->blacklist));
+            wp_send_json_success();
+        } else {
+            wp_send_json_error('Word not found in blacklist');
+        }
     }
 }
 
