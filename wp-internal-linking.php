@@ -2,8 +2,8 @@
 /*
  * Plugin Name:             WordPress Internal Linking
  * Plugin URI:              https://github.com/Open-WP-Club/wp-internal-linking
- * Description:             
- * Version:                 0.0.1
+ * Description:             A plugin to manage and analyze internal linking in WordPress
+ * Version:                 0.0.2
  * Author:                  Gabriel Kanev
  * Author URI:              https://gkanev.com
  * License:                 GPL-2.0 License
@@ -22,7 +22,7 @@ class Internal_Linking
 {
     private $options;
     private $blacklist;
-    private $blacklist_per_page = 20; // Number of blacklist items to show per page
+    private $blacklist_per_page = 20;
 
     public function __construct()
     {
@@ -30,22 +30,14 @@ class Internal_Linking
         add_action('admin_init', array($this, 'page_init'));
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
         add_filter('the_content', array($this, 'add_internal_links'));
-        add_action('wp_ajax_generate_link_diagram', array($this, 'generate_link_diagram'));
+        add_action('wp_ajax_generate_content_relationship_map', array($this, 'generate_content_relationship_map'));
+        add_action('wp_ajax_delete_content_relationship_map', array($this, 'delete_content_relationship_map'));
         add_action('wp_ajax_analyze_all_content', array($this, 'analyze_all_content'));
-        add_action('wp_ajax_delete_link_diagram', array($this, 'delete_link_diagram'));
+        add_action('wp_ajax_analyze_internal_links', array($this, 'analyze_internal_links'));
 
         $this->options = get_option('internal_linking_options');
         $this->blacklist = $this->get_blacklist();
         $this->add_ajax_handlers();
-    }
-
-    private function get_blacklist()
-    {
-        $blacklist_file = plugin_dir_path(__FILE__) . 'blacklist.php';
-        if (file_exists($blacklist_file)) {
-            return include $blacklist_file;
-        }
-        return array(); // Return an empty array if the file doesn't exist
     }
 
     public function add_plugin_pages()
@@ -68,7 +60,8 @@ class Internal_Linking
             <h2 class="nav-tab-wrapper">
                 <a href="?page=internal-linking" class="nav-tab <?php echo ($_GET['page'] === 'internal-linking' && !isset($_GET['tab'])) ? 'nav-tab-active' : ''; ?>">Overview</a>
                 <a href="?page=internal-linking&tab=word-usage" class="nav-tab <?php echo (isset($_GET['tab']) && $_GET['tab'] === 'word-usage') ? 'nav-tab-active' : ''; ?>">Word Usage</a>
-                <a href="?page=internal-linking&tab=link-diagram" class="nav-tab <?php echo (isset($_GET['tab']) && $_GET['tab'] === 'link-diagram') ? 'nav-tab-active' : ''; ?>">Link Diagram</a>
+                <a href="?page=internal-linking&tab=content-relationship-map" class="nav-tab <?php echo (isset($_GET['tab']) && $_GET['tab'] === 'content-relationship-map') ? 'nav-tab-active' : ''; ?>">Content Relationship Map</a>
+                <a href="?page=internal-linking&tab=internal-link-analysis" class="nav-tab <?php echo (isset($_GET['tab']) && $_GET['tab'] === 'internal-link-analysis') ? 'nav-tab-active' : ''; ?>">Internal Link Analysis</a>
             </h2>
             <div class="internal-linking-content">
                 <?php
@@ -77,8 +70,11 @@ class Internal_Linking
                     case 'word-usage':
                         $this->create_word_usage_page();
                         break;
-                    case 'link-diagram':
-                        $this->create_link_diagram_page();
+                    case 'content-relationship-map':
+                        $this->create_content_relationship_map_page();
+                        break;
+                    case 'internal-link-analysis':
+                        $this->create_internal_link_analysis_page();
                         break;
                     default:
                         $this->create_overview_page();
@@ -87,69 +83,6 @@ class Internal_Linking
                 ?>
             </div>
         </div>
-        <style>
-            .internal-linking-content {
-                margin-top: 20px;
-            }
-            .internal-linking-section {
-                background: #fff;
-                border: 1px solid #ccd0d4;
-                box-shadow: 0 1px 1px rgba(0,0,0,.04);
-                padding: 20px;
-                margin-bottom: 20px;
-            }
-            .internal-linking-section h3 {
-                margin-top: 0;
-            }
-            .internal-linking-table {
-                width: 100%;
-                border-collapse: collapse;
-            }
-            .internal-linking-table th,
-            .internal-linking-table td {
-                padding: 10px;
-                text-align: left;
-                border-bottom: 1px solid #e5e5e5;
-            }
-            .internal-linking-table th {
-                background-color: #f9f9f9;
-            }
-            #blacklist-manager {
-                margin-top: 20px;
-            }
-            #blacklist-content {
-                margin-top: 10px;
-            }
-            #search-blacklist {
-                width: 100%;
-                max-width: 300px;
-                margin-bottom: 10px;
-            }
-            .blacklist-words {
-                list-style-type: none;
-                padding: 0;
-            }
-            .blacklist-words li {
-                margin-bottom: 5px;
-            }
-            #add-to-blacklist {
-                margin-top: 10px;
-            }
-            #new-blacklist-word {
-                width: 100%;
-                max-width: 300px;
-            }
-            #link-diagram {
-                margin-top: 20px;
-                overflow-x: auto;
-            }
-            .button-group {
-                margin-top: 10px;
-            }
-            .button-group .button {
-                margin-right: 10px;
-            }
-        </style>
     <?php
     }
 
@@ -231,6 +164,95 @@ class Internal_Linking
     <?php
     }
 
+    public function create_word_usage_page()
+    {
+    ?>
+        <div class="internal-linking-section">
+            <h3>Word Usage Analysis</h3>
+            <p>Analyze your content to see how words are used across your site.</p>
+            <button id="analyze-all-content" class="button button-primary">Analyze All Content</button>
+            <div id="analysis-results" style="margin-top: 20px;">
+                <?php
+                $stored_analysis = get_option('internal_linking_analysis');
+                if ($stored_analysis) {
+                    echo $this->generate_analysis_table($stored_analysis);
+                } else {
+                    echo '<p>No analysis data available. Click the button above to start the analysis.</p>';
+                }
+                ?>
+            </div>
+        </div>
+    <?php
+    }
+
+    public function create_content_relationship_map_page()
+    {
+        $saved_diagram = get_option('internal_linking_diagram');
+    ?>
+        <div class="internal-linking-section">
+            <h3>Content Relationship Map</h3>
+            <p>Generate a visual representation of relationships between your content based on common keywords.</p>
+            <div id="content-relationship-map" data-saved-diagram="<?php echo esc_attr($saved_diagram ? 'true' : 'false'); ?>"></div>
+            <div class="button-group">
+                <button id="generate-diagram" class="button button-primary">Generate Map</button>
+                <button id="delete-diagram" class="button" <?php echo $saved_diagram ? '' : 'style="display:none;"'; ?>>Delete Map</button>
+                <button id="download-diagram" class="button" <?php echo $saved_diagram ? '' : 'style="display:none;"'; ?>>Download as PNG</button>
+                <button id="download-svg" class="button" <?php echo $saved_diagram ? '' : 'style="display:none;"'; ?>>Download as SVG</button>
+            </div>
+        </div>
+    <?php
+    }
+
+    public function create_internal_link_analysis_page()
+    {
+    ?>
+        <div class="internal-linking-section">
+            <h3>Internal Link Analysis</h3>
+            <p>Analyze existing internal links in your posts, pages, and other content types.</p>
+            <button id="analyze-internal-links" class="button button-primary">Analyze Internal Links</button>
+            <div id="internal-link-analysis-results"></div>
+        </div>
+    <?php
+    }
+
+    public function page_init()
+    {
+        register_setting(
+            'internal_linking_option_group',
+            'internal_linking_options',
+            array($this, 'sanitize')
+        );
+    }
+
+    public function sanitize($input)
+    {
+        return $input;
+    }
+
+    public function enqueue_admin_scripts($hook)
+    {
+        if ($hook == 'tools_page_internal-linking') {
+            wp_enqueue_style('internal-linking-admin-styles', plugins_url('css/style.css', __FILE__));
+            wp_enqueue_script('mermaid', 'https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js', array(), '8.13.10', true);
+            wp_enqueue_script('file-saver', 'https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.0/FileSaver.min.js', array(), '2.0.0', true);
+            wp_enqueue_script('internal-linking-admin', plugins_url('js/admin.js', __FILE__), array('jquery'), '1.0', true);
+            wp_enqueue_script('internal-linking-diagram', plugins_url('js/diagram.js', __FILE__), array('jquery', 'mermaid', 'file-saver'), '1.0', true);
+            wp_localize_script('internal-linking-admin', 'ailAjax', array(
+                'ajaxurl' => admin_url('admin-ajax.php'),
+                'savedDiagram' => get_option('internal_linking_diagram', '')
+            ));
+        }
+    }
+
+    private function get_blacklist()
+    {
+        $blacklist_file = plugin_dir_path(__FILE__) . 'blacklist.php';
+        if (file_exists($blacklist_file)) {
+            return include $blacklist_file;
+        }
+        return array(); // Return an empty array if the file doesn't exist
+    }
+
     private function display_blacklist()
     {
         $page = isset($_GET['blacklist_page']) ? intval($_GET['blacklist_page']) : 1;
@@ -281,74 +303,6 @@ class Internal_Linking
                 'add_args' => array('blacklist_search' => $search)
             ));
             echo '</div>';
-        }
-    }
-
-    public function create_word_usage_page()
-    {
-    ?>
-        <div class="internal-linking-section">
-            <h3>Word Usage Analysis</h3>
-            <p>Analyze your content to see how words are used across your site.</p>
-            <button id="analyze-all-content" class="button button-primary">Analyze All Content</button>
-            <div id="analysis-results" style="margin-top: 20px;">
-                <?php
-                $stored_analysis = get_option('internal_linking_analysis');
-                if ($stored_analysis) {
-                    echo $this->generate_analysis_table($stored_analysis);
-                } else {
-                    echo '<p>No analysis data available. Click the button above to start the analysis.</p>';
-                }
-                ?>
-            </div>
-        </div>
-    <?php
-    }
-
-    public function create_link_diagram_page()
-    {
-        $saved_diagram = get_option('internal_linking_diagram');
-    ?>
-        <div class="internal-linking-section">
-            <h3>Internal Link Diagram</h3>
-            <p>Generate a visual representation of your internal linking structure.</p>
-            <div id="link-diagram" data-saved-diagram="<?php echo esc_attr($saved_diagram ? 'true' : 'false'); ?>"></div>
-            <div class="button-group">
-                <button id="generate-diagram" class="button button-primary">Generate Diagram</button>
-                <button id="delete-diagram" class="button" <?php echo $saved_diagram ? '' : 'style="display:none;"'; ?>>Delete Diagram</button>
-                <button id="download-diagram" class="button" <?php echo $saved_diagram ? '' : 'style="display:none;"'; ?>>Download as PNG</button>
-                <button id="download-svg" class="button" <?php echo $saved_diagram ? '' : 'style="display:none;"'; ?>>Download as SVG</button>
-            </div>
-        </div>
-    <?php
-    }
-
-    public function page_init()
-    {
-        register_setting(
-            'internal_linking_option_group',
-            'internal_linking_options',
-            array($this, 'sanitize')
-        );
-    }
-
-    public function sanitize($input)
-    {
-        return $input;
-    }
-
-    public function enqueue_admin_scripts($hook)
-    {
-        if ($hook == 'tools_page_internal-linking') {
-            wp_enqueue_style('internal-linking-admin-styles', plugins_url('css/admin-styles.css', __FILE__));
-            wp_enqueue_script('mermaid', 'https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js', array(), '8.13.10', true);
-            wp_enqueue_script('file-saver', 'https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.0/FileSaver.min.js', array(), '2.0.0', true);
-            wp_enqueue_script('internal-linking-admin', plugins_url('js/admin.js', __FILE__), array('jquery'), '1.0', true);
-            wp_enqueue_script('internal-linking-diagram', plugins_url('js/diagram.js', __FILE__), array('jquery', 'mermaid', 'file-saver'), '1.0', true);
-            wp_localize_script('internal-linking-admin', 'ailAjax', array(
-                'ajaxurl' => admin_url('admin-ajax.php'),
-                'savedDiagram' => get_option('internal_linking_diagram', '')
-            ));
         }
     }
 
@@ -500,7 +454,7 @@ class Internal_Linking
         return null;
     }
 
-    public function generate_link_diagram()
+    public function generate_content_relationship_map()
     {
         if (!current_user_can('manage_options')) {
             wp_die('Unauthorized user');
@@ -547,7 +501,7 @@ class Internal_Linking
         wp_send_json_success($diagram);
     }
 
-    public function delete_link_diagram()
+    public function delete_content_relationship_map()
     {
         if (!current_user_can('manage_options')) {
             wp_die('Unauthorized user');
@@ -570,6 +524,85 @@ class Internal_Linking
         }
         // Ensure the label is not empty
         return !empty($text) ? $text : 'Unnamed';
+    }
+
+    public function analyze_internal_links()
+    {
+        if (!current_user_can('manage_options')) {
+            wp_die('Unauthorized user');
+        }
+
+        $args = array(
+            'post_type' => array('post', 'page'),
+            'post_status' => 'publish',
+            'posts_per_page' => -1,
+        );
+
+        $query = new WP_Query($args);
+        $link_data = array();
+
+        if ($query->have_posts()) {
+            while ($query->have_posts()) {
+                $query->the_post();
+                $post_id = get_the_ID();
+                $post_title = get_the_title();
+                $post_content = get_the_content();
+
+                preg_match_all('/<a\s[^>]*href=([\'"])(.*?)\1[^>]*>(.*?)<\/a>/i', $post_content, $matches);
+
+                foreach ($matches[2] as $index => $url) {
+                    if (strpos($url, get_site_url()) !== false) {
+                        $link_text = strip_tags($matches[3][$index]);
+                        $target_post_id = url_to_postid($url);
+                        if ($target_post_id) {
+                            $link_data[] = array(
+                                'source' => $post_id,
+                                'source_title' => $post_title,
+                                'target' => $target_post_id,
+                                'target_title' => get_the_title($target_post_id),
+                                'link_text' => $link_text
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        wp_reset_postdata();
+
+        $diagram = $this->generate_internal_link_diagram($link_data);
+        wp_send_json_success($diagram);
+    }
+
+    private function generate_internal_link_diagram($link_data)
+    {
+        $diagram = "graph TD\n";
+        $nodes = array();
+        $connections = array();
+
+        foreach ($link_data as $link) {
+            $source_node = 'post_' . $link['source'];
+            $target_node = 'post_' . $link['target'];
+
+            if (!in_array($source_node, $nodes)) {
+                $escaped_source_title = $this->escape_mermaid_label($link['source_title']);
+                $diagram .= "    {$source_node}[\"{$escaped_source_title}\"]\n";
+                $nodes[] = $source_node;
+            }
+
+            if (!in_array($target_node, $nodes)) {
+                $escaped_target_title = $this->escape_mermaid_label($link['target_title']);
+                $diagram .= "    {$target_node}[\"{$escaped_target_title}\"]\n";
+                $nodes[] = $target_node;
+            }
+
+            $escaped_link_text = $this->escape_mermaid_label($link['link_text']);
+            $connections[] = "    {$source_node} -->|{$escaped_link_text}| {$target_node}\n";
+        }
+
+        $diagram .= implode("", array_unique($connections));
+
+        return $diagram;
     }
 
     public function add_ajax_handlers()

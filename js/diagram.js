@@ -12,43 +12,43 @@ jQuery(document).ready(function ($) {
     securityLevel: "loose",
   });
 
-  var diagramData = ailAjax.savedDiagram || null;
+  var contentRelationshipMapData = ailAjax.savedDiagram || null;
 
-  // Load saved diagram if it exists
-  if (diagramData) {
-    renderDiagram();
-    $("#generate-diagram").text("Update Diagram");
+  // Load saved content relationship map if it exists
+  if (contentRelationshipMapData) {
+    renderContentRelationshipMap();
+    $("#generate-diagram").text("Update Map");
     $("#delete-diagram, #download-diagram, #download-svg").show();
   }
 
   $("#generate-diagram").on("click", function (e) {
     e.preventDefault();
     var $button = $(this);
-    var $diagram = $("#link-diagram");
-    var buttonText = diagramData ? "Updating..." : "Generating...";
+    var $diagram = $("#content-relationship-map");
+    var buttonText = contentRelationshipMapData
+      ? "Updating..."
+      : "Generating...";
 
     $button.prop("disabled", true).text(buttonText);
 
-    if (!diagramData) {
-      $diagram.html(
-        "<p>Generating diagram. This may take a few moments...</p>"
-      );
+    if (!contentRelationshipMapData) {
+      $diagram.html("<p>Generating map. This may take a few moments...</p>");
     }
 
     $.ajax({
       url: ailAjax.ajaxurl,
       type: "POST",
       data: {
-        action: "generate_link_diagram",
+        action: "generate_content_relationship_map",
       },
       success: function (response) {
         if (response.success) {
-          diagramData = response.data;
-          renderDiagram();
+          contentRelationshipMapData = response.data;
+          renderContentRelationshipMap();
           $("#delete-diagram, #download-diagram, #download-svg").show();
         } else {
           $diagram.html(
-            "<p>Failed to generate diagram data. Please try again.</p>"
+            "<p>Failed to generate map data. Please try again.</p>"
           );
         }
       },
@@ -59,25 +59,27 @@ jQuery(document).ready(function ($) {
         );
       },
       complete: function () {
-        $button.prop("disabled", false).text("Update Diagram");
+        $button.prop("disabled", false).text("Update Map");
       },
     });
   });
 
-  function renderDiagram() {
-    var $diagram = $("#link-diagram");
+  function renderContentRelationshipMap() {
+    var $diagram = $("#content-relationship-map");
     $diagram.empty();
-    var diagramContainer = $('<div class="mermaid">').text(diagramData);
+    var diagramContainer = $('<div class="mermaid">').text(
+      contentRelationshipMapData
+    );
     $diagram.append(diagramContainer);
     try {
       mermaid.init(undefined, $(".mermaid"));
     } catch (error) {
       console.error("Mermaid rendering error:", error);
-      console.log("Diagram data:", diagramData);
+      console.log("Diagram data:", contentRelationshipMapData);
       $diagram.html(
-        "<p>Failed to render diagram. The data might be too complex or contain invalid syntax. Please try again with fewer words or content items.</p>"
+        "<p>Failed to render map. The data might be too complex or contain invalid syntax. Please try again with fewer words or content items.</p>"
       );
-      $diagram.append("<pre>" + diagramData + "</pre>");
+      $diagram.append("<pre>" + contentRelationshipMapData + "</pre>");
     }
   }
 
@@ -90,24 +92,24 @@ jQuery(document).ready(function ($) {
       url: ailAjax.ajaxurl,
       type: "POST",
       data: {
-        action: "delete_link_diagram",
+        action: "delete_content_relationship_map",
       },
       success: function (response) {
         if (response.success) {
-          var $diagram = $("#link-diagram");
+          var $diagram = $("#content-relationship-map");
           $diagram.empty();
-          diagramData = null;
-          $("#generate-diagram").text("Generate Diagram");
+          contentRelationshipMapData = null;
+          $("#generate-diagram").text("Generate Map");
           $("#delete-diagram, #download-diagram, #download-svg").hide();
         } else {
-          alert("Failed to delete the diagram. Please try again.");
+          alert("Failed to delete the map. Please try again.");
         }
       },
       error: function () {
-        alert("An error occurred while deleting the diagram. Please try again.");
+        alert("An error occurred while deleting the map. Please try again.");
       },
       complete: function () {
-        $button.prop("disabled", false).text("Delete Diagram");
+        $button.prop("disabled", false).text("Delete Map");
       },
     });
   });
@@ -123,12 +125,12 @@ jQuery(document).ready(function ($) {
   });
 
   function downloadDiagram(format) {
-    var $diagram = $("#link-diagram svg");
+    var $diagram = $("#content-relationship-map svg");
     if ($diagram.length) {
       var svgData = new XMLSerializer().serializeToString($diagram[0]);
       if (format === "svg") {
         var blob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
-        saveAs(blob, "internal_link_diagram.svg");
+        saveAs(blob, "content_relationship_map.svg");
       } else {
         var canvas = document.createElement("canvas");
         var ctx = canvas.getContext("2d");
@@ -138,7 +140,7 @@ jQuery(document).ready(function ($) {
           canvas.height = img.height;
           ctx.drawImage(img, 0, 0);
           canvas.toBlob(function (blob) {
-            saveAs(blob, "internal_link_diagram.png");
+            saveAs(blob, "content_relationship_map.png");
           });
         };
         img.src =
@@ -146,7 +148,61 @@ jQuery(document).ready(function ($) {
           btoa(unescape(encodeURIComponent(svgData)));
       }
     } else {
-      alert("No diagram to download. Please generate a diagram first.");
+      alert("No map to download. Please generate a map first.");
+    }
+  }
+
+  // Internal Link Analysis
+  $("#analyze-internal-links").on("click", function (e) {
+    e.preventDefault();
+    var $button = $(this);
+    var $results = $("#internal-link-analysis-results");
+
+    $button.prop("disabled", true).text("Analyzing...");
+    $results.html(
+      "<p>Analysis in progress. This may take a few moments...</p>"
+    );
+
+    $.ajax({
+      url: ailAjax.ajaxurl,
+      type: "POST",
+      data: {
+        action: "analyze_internal_links",
+      },
+      success: function (response) {
+        if (response.success) {
+          renderInternalLinkDiagram(response.data);
+        } else {
+          $results.html(
+            "<p>Failed to analyze internal links. Please try again.</p>"
+          );
+        }
+      },
+      error: function () {
+        $results.html(
+          "<p>An error occurred while analyzing internal links. Please try again.</p>"
+        );
+      },
+      complete: function () {
+        $button.prop("disabled", false).text("Analyze Internal Links");
+      },
+    });
+  });
+
+  function renderInternalLinkDiagram(diagramData) {
+    var $results = $("#internal-link-analysis-results");
+    $results.empty();
+    var diagramContainer = $('<div class="mermaid">').text(diagramData);
+    $results.append(diagramContainer);
+    try {
+      mermaid.init(undefined, $(".mermaid"));
+    } catch (error) {
+      console.error("Mermaid rendering error:", error);
+      console.log("Diagram data:", diagramData);
+      $results.html(
+        "<p>Failed to render internal link diagram. The data might be too complex or contain invalid syntax.</p>"
+      );
+      $results.append("<pre>" + diagramData + "</pre>");
     }
   }
 
@@ -164,14 +220,8 @@ jQuery(document).ready(function ($) {
         },
         success: function (response) {
           if (response.success) {
-            $("#blacklist-manager ul").append(
-              "<li>" +
-                word +
-                ' <button class="remove-blacklist-word" data-word="' +
-                word +
-                '">Remove</button></li>'
-            );
             $("#new-blacklist-word").val("");
+            refreshBlacklist();
           } else {
             alert(
               "Failed to add word to blacklist. It may already be in the list."
@@ -195,11 +245,65 @@ jQuery(document).ready(function ($) {
       },
       success: function (response) {
         if (response.success) {
-          $button.parent().remove();
+          refreshBlacklist();
         } else {
           alert("Failed to remove word from blacklist.");
         }
       },
     });
   });
+
+  // Search blacklist
+  var searchTimer;
+  $("#search-blacklist").on("input", function () {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(function () {
+      refreshBlacklist();
+    }, 300);
+  });
+
+  function refreshBlacklist(page = 1) {
+    var search = $("#search-blacklist").val();
+    $.ajax({
+      url: ailAjax.ajaxurl,
+      type: "POST",
+      data: {
+        action: "search_blacklist",
+        search: search,
+        page: page,
+      },
+      success: function (response) {
+        if (response.success) {
+          $("#blacklist-words").html(response.data.blacklist_html);
+          $("#blacklist-pagination").html(response.data.pagination_html);
+
+          // Update the current page in the URL
+          var newUrl = updateQueryStringParameter(
+            window.location.href,
+            "blacklist_page",
+            page
+          );
+          history.pushState(null, "", newUrl);
+        }
+      },
+    });
+  }
+
+  // Handle pagination clicks
+  $(document).on("click", "#blacklist-pagination a", function (e) {
+    e.preventDefault();
+    var page = $(this).attr("href").split("blacklist_page=")[1];
+    refreshBlacklist(page);
+  });
+
+  // Helper function to update URL parameters
+  function updateQueryStringParameter(uri, key, value) {
+    var re = new RegExp("([?&])" + key + "=.*?(&|$)", "i");
+    var separator = uri.indexOf("?") !== -1 ? "&" : "?";
+    if (uri.match(re)) {
+      return uri.replace(re, "$1" + key + "=" + value + "$2");
+    } else {
+      return uri + separator + key + "=" + value;
+    }
+  }
 });
