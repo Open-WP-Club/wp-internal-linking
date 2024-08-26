@@ -12,7 +12,14 @@ jQuery(document).ready(function ($) {
     securityLevel: "loose",
   });
 
-  var diagramData = null;
+  var diagramData = ailAjax.savedDiagram || null;
+
+  // Load saved diagram if it exists
+  if (diagramData) {
+    renderDiagram();
+    $("#generate-diagram").text("Update Diagram");
+    $("#delete-diagram, #download-diagram, #download-svg").show();
+  }
 
   $("#generate-diagram").on("click", function (e) {
     e.preventDefault();
@@ -38,6 +45,7 @@ jQuery(document).ready(function ($) {
         if (response.success) {
           diagramData = response.data;
           renderDiagram();
+          $("#delete-diagram, #download-diagram, #download-svg").show();
         } else {
           $diagram.html(
             "<p>Failed to generate diagram data. Please try again.</p>"
@@ -75,10 +83,33 @@ jQuery(document).ready(function ($) {
 
   $("#delete-diagram").on("click", function (e) {
     e.preventDefault();
-    var $diagram = $("#link-diagram");
-    $diagram.empty();
-    diagramData = null;
-    $("#generate-diagram").text("Generate Diagram");
+    var $button = $(this);
+    $button.prop("disabled", true).text("Deleting...");
+
+    $.ajax({
+      url: ailAjax.ajaxurl,
+      type: "POST",
+      data: {
+        action: "delete_link_diagram",
+      },
+      success: function (response) {
+        if (response.success) {
+          var $diagram = $("#link-diagram");
+          $diagram.empty();
+          diagramData = null;
+          $("#generate-diagram").text("Generate Diagram");
+          $("#delete-diagram, #download-diagram, #download-svg").hide();
+        } else {
+          alert("Failed to delete the diagram. Please try again.");
+        }
+      },
+      error: function () {
+        alert("An error occurred while deleting the diagram. Please try again.");
+      },
+      complete: function () {
+        $button.prop("disabled", false).text("Delete Diagram");
+      },
+    });
   });
 
   $("#download-diagram").on("click", function (e) {

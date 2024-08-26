@@ -22,6 +22,7 @@ class Internal_Linking
 {
     private $options;
     private $blacklist;
+    private $blacklist_per_page = 20; // Number of blacklist items to show per page
 
     public function __construct()
     {
@@ -31,6 +32,7 @@ class Internal_Linking
         add_filter('the_content', array($this, 'add_internal_links'));
         add_action('wp_ajax_generate_link_diagram', array($this, 'generate_link_diagram'));
         add_action('wp_ajax_analyze_all_content', array($this, 'analyze_all_content'));
+        add_action('wp_ajax_delete_link_diagram', array($this, 'delete_link_diagram'));
 
         $this->options = get_option('internal_linking_options');
         $this->blacklist = $this->get_blacklist();
@@ -142,19 +144,76 @@ class Internal_Linking
         
         <h4>Manage Blacklist</h4>
         <div id="blacklist-manager">
-            <ul>
-                <?php foreach ($this->blacklist as $word): ?>
-                    <li>
-                        <?php echo esc_html($word); ?>
-                        <button class="remove-blacklist-word" data-word="<?php echo esc_attr($word); ?>">Remove</button>
-                    </li>
-                <?php endforeach; ?>
-            </ul>
-            <input type="text" id="new-blacklist-word" placeholder="Add new word">
-            <button id="add-blacklist-word">Add to Blacklist</button>
+            <button id="toggle-blacklist" class="button">Show/Hide Blacklist</button>
+            <div id="blacklist-content" style="display: none;">
+                <input type="text" id="search-blacklist" placeholder="Search blacklist">
+                <div id="blacklist-words">
+                    <?php $this->display_blacklist(); ?>
+                </div>
+                <div id="blacklist-pagination">
+                    <?php $this->display_blacklist_pagination(); ?>
+                </div>
+            </div>
+            <div id="add-to-blacklist">
+                <input type="text" id="new-blacklist-word" placeholder="Add new word">
+                <button id="add-blacklist-word" class="button">Add to Blacklist</button>
+            </div>
         </div>
         <p>Use the tabs above to view detailed word usage across your content and the internal link diagram.</p>
     <?php
+    }
+
+    private function display_blacklist()
+    {
+        $page = isset($_GET['blacklist_page']) ? intval($_GET['blacklist_page']) : 1;
+        $search = isset($_GET['blacklist_search']) ? sanitize_text_field($_GET['blacklist_search']) : '';
+        
+        $filtered_blacklist = array_filter($this->blacklist, function($word) use ($search) {
+            return empty($search) || stripos($word, $search) !== false;
+        });
+
+        $total_items = count($filtered_blacklist);
+        $total_pages = ceil($total_items / $this->blacklist_per_page);
+        $page = max(1, min($page, $total_pages));
+
+        $start = ($page - 1) * $this->blacklist_per_page;
+        $displayed_items = array_slice($filtered_blacklist, $start, $this->blacklist_per_page);
+
+        echo '<ul class="blacklist-words">';
+        foreach ($displayed_items as $word) {
+            echo '<li>';
+            echo esc_html($word);
+            echo ' <button class="remove-blacklist-word button-link" data-word="' . esc_attr($word) . '">Remove</button>';
+            echo '</li>';
+        }
+        echo '</ul>';
+    }
+
+    private function display_blacklist_pagination()
+    {
+        $page = isset($_GET['blacklist_page']) ? intval($_GET['blacklist_page']) : 1;
+        $search = isset($_GET['blacklist_search']) ? sanitize_text_field($_GET['blacklist_search']) : '';
+        
+        $filtered_blacklist = array_filter($this->blacklist, function($word) use ($search) {
+            return empty($search) || stripos($word, $search) !== false;
+        });
+
+        $total_items = count($filtered_blacklist);
+        $total_pages = ceil($total_items / $this->blacklist_per_page);
+
+        if ($total_pages > 1) {
+            echo '<div class="tablenav-pages">';
+            echo paginate_links(array(
+                'base' => add_query_arg('blacklist_page', '%#%'),
+                'format' => '',
+                'prev_text' => __('&laquo;'),
+                'next_text' => __('&raquo;'),
+                'total' => $total_pages,
+                'current' => $page,
+                'add_args' => array('blacklist_search' => $search)
+            ));
+            echo '</div>';
+        }
     }
 
     public function create_word_usage_page()
@@ -177,13 +236,14 @@ class Internal_Linking
 
     public function create_link_diagram_page()
     {
+        $saved_diagram = get_option('internal_linking_diagram');
     ?>
         <h3>Internal Link Diagram</h3>
-        <div id="link-diagram"></div>
+        <div id="link-diagram" data-saved-diagram="<?php echo esc_attr($saved_diagram ? 'true' : 'false'); ?>"></div>
         <button id="generate-diagram" class="button button-primary">Generate Diagram</button>
-        <button id="delete-diagram" class="button">Delete Diagram</button>
-        <button id="download-diagram" class="button">Download as PNG</button>
-        <button id="download-svg" class="button">Download as SVG</button>
+        <button id="delete-diagram" class="button" <?php echo $saved_diagram ? '' : 'style="display:none;"'; ?>>Delete Diagram</button>
+        <button id="download-diagram" class="button" <?php echo $saved_diagram ? '' : 'style="display:none;"'; ?>>Download as PNG</button>
+        <button id="download-svg" class="button" <?php echo $saved_diagram ? '' : 'style="display:none;"'; ?>>Download as SVG</button>
     <?php
     }
 
@@ -208,7 +268,10 @@ class Internal_Linking
             wp_enqueue_script('file-saver', 'https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.0/FileSaver.min.js', array(), '2.0.0', true);
             wp_enqueue_script('internal-linking-admin', plugins_url('js/admin.js', __FILE__), array('jquery'), '1.0', true);
             wp_enqueue_script('internal-linking-diagram', plugins_url('js/diagram.js', __FILE__), array('jquery', 'mermaid', 'file-saver'), '1.0', true);
-            wp_localize_script('internal-linking-admin', 'ailAjax', array('ajaxurl' => admin_url('admin-ajax.php')));
+            wp_localize_script('internal-linking-admin', 'ailAjax', array(
+                'ajaxurl' => admin_url('admin-ajax.php'),
+                'savedDiagram' => get_option('internal_linking_diagram', '')
+            ));
         }
     }
 
@@ -401,7 +464,20 @@ class Internal_Linking
 
         $diagram .= implode("", array_unique($connections));
 
+        // Save the generated diagram
+        update_option('internal_linking_diagram', $diagram);
+
         wp_send_json_success($diagram);
+    }
+
+    public function delete_link_diagram()
+    {
+        if (!current_user_can('manage_options')) {
+            wp_die('Unauthorized user');
+        }
+
+        delete_option('internal_linking_diagram');
+        wp_send_json_success();
     }
 
     private function escape_mermaid_label($text)
@@ -423,6 +499,7 @@ class Internal_Linking
     {
         add_action('wp_ajax_add_blacklist_word', array($this, 'ajax_add_blacklist_word'));
         add_action('wp_ajax_remove_blacklist_word', array($this, 'ajax_remove_blacklist_word'));
+        add_action('wp_ajax_search_blacklist', array($this, 'ajax_search_blacklist'));
     }
 
     public function ajax_add_blacklist_word()
@@ -434,7 +511,7 @@ class Internal_Linking
         $word = sanitize_text_field($_POST['word']);
         if (!in_array($word, $this->blacklist)) {
             $this->blacklist[] = $word;
-            update_option('internal_linking_blacklist', $this->blacklist);
+            $this->update_blacklist();
             wp_send_json_success();
         } else {
             wp_send_json_error('Word already in blacklist');
@@ -451,11 +528,59 @@ class Internal_Linking
         $key = array_search($word, $this->blacklist);
         if ($key !== false) {
             unset($this->blacklist[$key]);
-            update_option('internal_linking_blacklist', array_values($this->blacklist));
+            $this->update_blacklist();
             wp_send_json_success();
         } else {
             wp_send_json_error('Word not found in blacklist');
         }
+    }
+
+    public function ajax_search_blacklist()
+    {
+        if (!current_user_can('manage_options')) {
+            wp_die('Unauthorized user');
+        }
+
+        $search = isset($_POST['search']) ? sanitize_text_field($_POST['search']) : '';
+        $page = isset($_POST['page']) ? intval($_POST['page']) : 1;
+
+        $filtered_blacklist = array_filter($this->blacklist, function($word) use ($search) {
+            return empty($search) || stripos($word, $search) !== false;
+        });
+
+        $total_items = count($filtered_blacklist);
+        $total_pages = ceil($total_items / $this->blacklist_per_page);
+        $page = max(1, min($page, $total_pages));
+
+        $start = ($page - 1) * $this->blacklist_per_page;
+        $displayed_items = array_slice($filtered_blacklist, $start, $this->blacklist_per_page);
+
+        ob_start();
+        echo '<ul class="blacklist-words">';
+        foreach ($displayed_items as $word) {
+            echo '<li>';
+            echo esc_html($word);
+            echo ' <button class="remove-blacklist-word button-link" data-word="' . esc_attr($word) . '">Remove</button>';
+            echo '</li>';
+        }
+        echo '</ul>';
+        $blacklist_html = ob_get_clean();
+
+        ob_start();
+        $this->display_blacklist_pagination();
+        $pagination_html = ob_get_clean();
+
+        wp_send_json_success(array(
+            'blacklist_html' => $blacklist_html,
+            'pagination_html' => $pagination_html
+        ));
+    }
+
+    private function update_blacklist()
+    {
+        $blacklist_file = plugin_dir_path(__FILE__) . 'blacklist.php';
+        $blacklist_content = "<?php\nreturn " . var_export(array_values($this->blacklist), true) . ";\n";
+        file_put_contents($blacklist_file, $blacklist_content);
     }
 }
 

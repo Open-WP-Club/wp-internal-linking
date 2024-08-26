@@ -1,22 +1,46 @@
 <?php
-// Don't allow direct access to this file
-if (!defined('ABSPATH')) {
-    exit;
-}
-
-return array(
-    // HTML tags and attributes
-    'div', 'span', 'class', 'style', 'script', 'href', 'src', 'h', 'p', 'fontsize', 'blockquote','is-loading',
-    
-    // Web-related terms
-    'http', 'https', 'www', 'com', 'net', 'org',
-    
-    // File extensions
-    'html', 'php', 'jpg', 'jpeg', 'png', 'gif', 'pdf',
-    
-    // Common English words
-    'the', 'and', 'for', 'with', 'this', 'that', 'from', 'your', 'have',
-    'about', 'which', 'their', 'there', 'what', 'when', 'who', 'how',
-    
-    // Add more words as needed
+return array (
+  0 => 'div',
+  1 => 'span',
+  2 => 'class',
+  3 => 'style',
+  4 => 'script',
+  5 => 'href',
+  6 => 'src',
+  7 => 'h',
+  8 => 'p',
+  9 => 'fontsize',
+  10 => 'blockquote',
+  11 => 'is-loading',
+  12 => 'http',
+  13 => 'https',
+  14 => 'www',
+  15 => 'com',
+  16 => 'net',
+  17 => 'org',
+  18 => 'html',
+  19 => 'php',
+  20 => 'jpg',
+  21 => 'jpeg',
+  22 => 'png',
+  23 => 'gif',
+  24 => 'pdf',
+  25 => 'the',
+  26 => 'and',
+  27 => 'for',
+  28 => 'with',
+  29 => 'this',
+  30 => 'that',
+  31 => 'from',
+  32 => 'your',
+  33 => 'have',
+  34 => 'about',
+  35 => 'which',
+  36 => 'their',
+  37 => 'there',
+  38 => 'what',
+  39 => 'when',
+  40 => 'who',
+  41 => 'how',
+  42 => 'test',
 );
