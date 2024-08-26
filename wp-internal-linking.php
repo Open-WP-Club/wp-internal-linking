@@ -70,21 +70,86 @@ class Internal_Linking
                 <a href="?page=internal-linking&tab=word-usage" class="nav-tab <?php echo (isset($_GET['tab']) && $_GET['tab'] === 'word-usage') ? 'nav-tab-active' : ''; ?>">Word Usage</a>
                 <a href="?page=internal-linking&tab=link-diagram" class="nav-tab <?php echo (isset($_GET['tab']) && $_GET['tab'] === 'link-diagram') ? 'nav-tab-active' : ''; ?>">Link Diagram</a>
             </h2>
-            <?php
-            $tab = isset($_GET['tab']) ? $_GET['tab'] : '';
-            switch ($tab) {
-                case 'word-usage':
-                    $this->create_word_usage_page();
-                    break;
-                case 'link-diagram':
-                    $this->create_link_diagram_page();
-                    break;
-                default:
-                    $this->create_overview_page();
-                    break;
-            }
-            ?>
+            <div class="internal-linking-content">
+                <?php
+                $tab = isset($_GET['tab']) ? $_GET['tab'] : '';
+                switch ($tab) {
+                    case 'word-usage':
+                        $this->create_word_usage_page();
+                        break;
+                    case 'link-diagram':
+                        $this->create_link_diagram_page();
+                        break;
+                    default:
+                        $this->create_overview_page();
+                        break;
+                }
+                ?>
+            </div>
         </div>
+        <style>
+            .internal-linking-content {
+                margin-top: 20px;
+            }
+            .internal-linking-section {
+                background: #fff;
+                border: 1px solid #ccd0d4;
+                box-shadow: 0 1px 1px rgba(0,0,0,.04);
+                padding: 20px;
+                margin-bottom: 20px;
+            }
+            .internal-linking-section h3 {
+                margin-top: 0;
+            }
+            .internal-linking-table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            .internal-linking-table th,
+            .internal-linking-table td {
+                padding: 10px;
+                text-align: left;
+                border-bottom: 1px solid #e5e5e5;
+            }
+            .internal-linking-table th {
+                background-color: #f9f9f9;
+            }
+            #blacklist-manager {
+                margin-top: 20px;
+            }
+            #blacklist-content {
+                margin-top: 10px;
+            }
+            #search-blacklist {
+                width: 100%;
+                max-width: 300px;
+                margin-bottom: 10px;
+            }
+            .blacklist-words {
+                list-style-type: none;
+                padding: 0;
+            }
+            .blacklist-words li {
+                margin-bottom: 5px;
+            }
+            #add-to-blacklist {
+                margin-top: 10px;
+            }
+            #new-blacklist-word {
+                width: 100%;
+                max-width: 300px;
+            }
+            #link-diagram {
+                margin-top: 20px;
+                overflow-x: auto;
+            }
+            .button-group {
+                margin-top: 10px;
+            }
+            .button-group .button {
+                margin-right: 10px;
+            }
+        </style>
     <?php
     }
 
@@ -111,55 +176,58 @@ class Internal_Linking
         // Get blacklist statistics
         $blacklist_count = count($this->blacklist);
     ?>
-        <h3>Internal Linking Overview</h3>
-        <p>Welcome to Internal Linking. Here are some statistics about your content:</p>
-        <table class="wp-list-table widefat fixed striped">
-            <thead>
-                <tr>
-                    <th>Metric</th>
-                    <th>Value</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td><strong>Total analyzed words</strong></td>
-                    <td><?php echo $total_words; ?></td>
-                </tr>
-                <tr>
-                    <td><strong>Total content items linked</strong></td>
-                    <td><?php echo $total_content_items; ?></td>
-                </tr>
-                <?php foreach ($content_types as $type => $count): ?>
+        <div class="internal-linking-section">
+            <h3>Internal Linking Overview</h3>
+            <p>Welcome to Internal Linking. Here are some statistics about your content:</p>
+            <table class="internal-linking-table">
+                <thead>
                     <tr>
-                        <td><strong><?php echo ucfirst($type) . 's linked'; ?></strong></td>
-                        <td><?php echo $count; ?></td>
+                        <th>Metric</th>
+                        <th>Value</th>
                     </tr>
-                <?php endforeach; ?>
-                <tr>
-                    <td><strong>Blacklisted words</strong></td>
-                    <td><?php echo $blacklist_count; ?></td>
-                </tr>
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Total analyzed words</strong></td>
+                        <td><?php echo $total_words; ?></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Total content items linked</strong></td>
+                        <td><?php echo $total_content_items; ?></td>
+                    </tr>
+                    <?php foreach ($content_types as $type => $count): ?>
+                        <tr>
+                            <td><strong><?php echo ucfirst($type) . 's linked'; ?></strong></td>
+                            <td><?php echo $count; ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    <tr>
+                        <td><strong>Blacklisted words</strong></td>
+                        <td><?php echo $blacklist_count; ?></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
         
-        <h4>Manage Blacklist</h4>
-        <div id="blacklist-manager">
-            <button id="toggle-blacklist" class="button">Show/Hide Blacklist</button>
-            <div id="blacklist-content" style="display: none;">
-                <input type="text" id="search-blacklist" placeholder="Search blacklist">
-                <div id="blacklist-words">
-                    <?php $this->display_blacklist(); ?>
+        <div class="internal-linking-section">
+            <h3>Manage Blacklist</h3>
+            <div id="blacklist-manager">
+                <button id="toggle-blacklist" class="button">Show/Hide Blacklist</button>
+                <div id="blacklist-content" style="display: none;">
+                    <input type="text" id="search-blacklist" placeholder="Search blacklist">
+                    <div id="blacklist-words">
+                        <?php $this->display_blacklist(); ?>
+                    </div>
+                    <div id="blacklist-pagination">
+                        <?php $this->display_blacklist_pagination(); ?>
+                    </div>
                 </div>
-                <div id="blacklist-pagination">
-                    <?php $this->display_blacklist_pagination(); ?>
+                <div id="add-to-blacklist">
+                    <input type="text" id="new-blacklist-word" placeholder="Add new word">
+                    <button id="add-blacklist-word" class="button">Add to Blacklist</button>
                 </div>
-            </div>
-            <div id="add-to-blacklist">
-                <input type="text" id="new-blacklist-word" placeholder="Add new word">
-                <button id="add-blacklist-word" class="button">Add to Blacklist</button>
             </div>
         </div>
-        <p>Use the tabs above to view detailed word usage across your content and the internal link diagram.</p>
     <?php
     }
 
@@ -219,17 +287,20 @@ class Internal_Linking
     public function create_word_usage_page()
     {
     ?>
-        <h3>Word Usage Analysis</h3>
-        <button id="analyze-all-content" class="button button-primary">Analyze All Content</button>
-        <div id="analysis-results">
-            <?php
-            $stored_analysis = get_option('internal_linking_analysis');
-            if ($stored_analysis) {
-                echo $this->generate_analysis_table($stored_analysis);
-            } else {
-                echo '<p>No analysis data available. Click the button above to start the analysis.</p>';
-            }
-            ?>
+        <div class="internal-linking-section">
+            <h3>Word Usage Analysis</h3>
+            <p>Analyze your content to see how words are used across your site.</p>
+            <button id="analyze-all-content" class="button button-primary">Analyze All Content</button>
+            <div id="analysis-results" style="margin-top: 20px;">
+                <?php
+                $stored_analysis = get_option('internal_linking_analysis');
+                if ($stored_analysis) {
+                    echo $this->generate_analysis_table($stored_analysis);
+                } else {
+                    echo '<p>No analysis data available. Click the button above to start the analysis.</p>';
+                }
+                ?>
+            </div>
         </div>
     <?php
     }
@@ -238,12 +309,17 @@ class Internal_Linking
     {
         $saved_diagram = get_option('internal_linking_diagram');
     ?>
-        <h3>Internal Link Diagram</h3>
-        <div id="link-diagram" data-saved-diagram="<?php echo esc_attr($saved_diagram ? 'true' : 'false'); ?>"></div>
-        <button id="generate-diagram" class="button button-primary">Generate Diagram</button>
-        <button id="delete-diagram" class="button" <?php echo $saved_diagram ? '' : 'style="display:none;"'; ?>>Delete Diagram</button>
-        <button id="download-diagram" class="button" <?php echo $saved_diagram ? '' : 'style="display:none;"'; ?>>Download as PNG</button>
-        <button id="download-svg" class="button" <?php echo $saved_diagram ? '' : 'style="display:none;"'; ?>>Download as SVG</button>
+        <div class="internal-linking-section">
+            <h3>Internal Link Diagram</h3>
+            <p>Generate a visual representation of your internal linking structure.</p>
+            <div id="link-diagram" data-saved-diagram="<?php echo esc_attr($saved_diagram ? 'true' : 'false'); ?>"></div>
+            <div class="button-group">
+                <button id="generate-diagram" class="button button-primary">Generate Diagram</button>
+                <button id="delete-diagram" class="button" <?php echo $saved_diagram ? '' : 'style="display:none;"'; ?>>Delete Diagram</button>
+                <button id="download-diagram" class="button" <?php echo $saved_diagram ? '' : 'style="display:none;"'; ?>>Download as PNG</button>
+                <button id="download-svg" class="button" <?php echo $saved_diagram ? '' : 'style="display:none;"'; ?>>Download as SVG</button>
+            </div>
+        </div>
     <?php
     }
 
@@ -264,6 +340,7 @@ class Internal_Linking
     public function enqueue_admin_scripts($hook)
     {
         if ($hook == 'tools_page_internal-linking') {
+            wp_enqueue_style('internal-linking-admin-styles', plugins_url('css/admin-styles.css', __FILE__));
             wp_enqueue_script('mermaid', 'https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js', array(), '8.13.10', true);
             wp_enqueue_script('file-saver', 'https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.0/FileSaver.min.js', array(), '2.0.0', true);
             wp_enqueue_script('internal-linking-admin', plugins_url('js/admin.js', __FILE__), array('jquery'), '1.0', true);
@@ -372,7 +449,7 @@ class Internal_Linking
 
     private function generate_analysis_table($word_usage)
     {
-        $html = '<table class="wp-list-table widefat fixed striped">';
+        $html = '<table class="internal-linking-table">';
         $html .= '<thead><tr><th>Word</th><th>Content</th></tr></thead><tbody>';
 
         foreach ($word_usage as $word => $content_items) {
