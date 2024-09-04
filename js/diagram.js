@@ -13,12 +13,22 @@ jQuery(document).ready(function ($) {
   });
 
   var contentRelationshipMapData = ailAjax.savedDiagram || null;
+  var internalLinkAnalysisData = ailAjax.savedInternalLinkAnalysis || null;
 
   // Load saved content relationship map if it exists
   if (contentRelationshipMapData) {
     renderContentRelationshipMap();
     $("#generate-diagram").text("Update Map");
     $("#delete-diagram, #download-diagram, #download-svg").show();
+  }
+
+  // Load saved internal link analysis if it exists
+  if (internalLinkAnalysisData) {
+    renderInternalLinkAnalysis();
+    $("#analyze-internal-links").text("Update Analysis");
+    $(
+      "#delete-internal-link-analysis, #download-internal-link-analysis, #download-internal-link-analysis-svg"
+    ).show();
   }
 
   $("#generate-diagram").on("click", function (e) {
@@ -116,52 +126,28 @@ jQuery(document).ready(function ($) {
 
   $("#download-diagram").on("click", function (e) {
     e.preventDefault();
-    downloadDiagram("png");
+    downloadDiagram("png", "content-relationship-map");
   });
 
   $("#download-svg").on("click", function (e) {
     e.preventDefault();
-    downloadDiagram("svg");
+    downloadDiagram("svg", "content-relationship-map");
   });
-
-  function downloadDiagram(format) {
-    var $diagram = $("#content-relationship-map svg");
-    if ($diagram.length) {
-      var svgData = new XMLSerializer().serializeToString($diagram[0]);
-      if (format === "svg") {
-        var blob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
-        saveAs(blob, "content_relationship_map.svg");
-      } else {
-        var canvas = document.createElement("canvas");
-        var ctx = canvas.getContext("2d");
-        var img = new Image();
-        img.onload = function () {
-          canvas.width = img.width;
-          canvas.height = img.height;
-          ctx.drawImage(img, 0, 0);
-          canvas.toBlob(function (blob) {
-            saveAs(blob, "content_relationship_map.png");
-          });
-        };
-        img.src =
-          "data:image/svg+xml;base64," +
-          btoa(unescape(encodeURIComponent(svgData)));
-      }
-    } else {
-      alert("No map to download. Please generate a map first.");
-    }
-  }
 
   // Internal Link Analysis
   $("#analyze-internal-links").on("click", function (e) {
     e.preventDefault();
     var $button = $(this);
     var $results = $("#internal-link-analysis-results");
+    var buttonText = internalLinkAnalysisData ? "Updating..." : "Analyzing...";
 
-    $button.prop("disabled", true).text("Analyzing...");
-    $results.html(
-      "<p>Analysis in progress. This may take a few moments...</p>"
-    );
+    $button.prop("disabled", true).text(buttonText);
+
+    if (!internalLinkAnalysisData) {
+      $results.html(
+        "<p>Analysis in progress. This may take a few moments...</p>"
+      );
+    }
 
     $.ajax({
       url: ailAjax.ajaxurl,
@@ -171,7 +157,11 @@ jQuery(document).ready(function ($) {
       },
       success: function (response) {
         if (response.success) {
-          renderInternalLinkDiagram(response.data);
+          internalLinkAnalysisData = response.data;
+          renderInternalLinkAnalysis();
+          $(
+            "#delete-internal-link-analysis, #download-internal-link-analysis, #download-internal-link-analysis-svg"
+          ).show();
         } else {
           $results.html(
             "<p>Failed to analyze internal links. Please try again.</p>"
@@ -184,25 +174,104 @@ jQuery(document).ready(function ($) {
         );
       },
       complete: function () {
-        $button.prop("disabled", false).text("Analyze Internal Links");
+        $button.prop("disabled", false).text("Update Analysis");
       },
     });
   });
 
-  function renderInternalLinkDiagram(diagramData) {
+  function renderInternalLinkAnalysis() {
     var $results = $("#internal-link-analysis-results");
     $results.empty();
-    var diagramContainer = $('<div class="mermaid">').text(diagramData);
+    var diagramContainer = $('<div class="mermaid">').text(
+      internalLinkAnalysisData
+    );
     $results.append(diagramContainer);
     try {
       mermaid.init(undefined, $(".mermaid"));
     } catch (error) {
       console.error("Mermaid rendering error:", error);
-      console.log("Diagram data:", diagramData);
+      console.log("Diagram data:", internalLinkAnalysisData);
       $results.html(
-        "<p>Failed to render internal link diagram. The data might be too complex or contain invalid syntax.</p>"
+        "<p>Failed to render internal link analysis. The data might be too complex or contain invalid syntax. Please try again with fewer content items.</p>"
       );
-      $results.append("<pre>" + diagramData + "</pre>");
+      $results.append("<pre>" + internalLinkAnalysisData + "</pre>");
+    }
+  }
+
+  $("#delete-internal-link-analysis").on("click", function (e) {
+    e.preventDefault();
+    var $button = $(this);
+    $button.prop("disabled", true).text("Deleting...");
+
+    $.ajax({
+      url: ailAjax.ajaxurl,
+      type: "POST",
+      data: {
+        action: "delete_internal_link_analysis",
+      },
+      success: function (response) {
+        if (response.success) {
+          var $results = $("#internal-link-analysis-results");
+          $results.empty();
+          internalLinkAnalysisData = null;
+          $("#analyze-internal-links").text("Analyze Internal Links");
+          $(
+            "#delete-internal-link-analysis, #download-internal-link-analysis, #download-internal-link-analysis-svg"
+          ).hide();
+        } else {
+          alert("Failed to delete the analysis. Please try again.");
+        }
+      },
+      error: function () {
+        alert(
+          "An error occurred while deleting the analysis. Please try again."
+        );
+      },
+      complete: function () {
+        $button.prop("disabled", false).text("Delete Analysis");
+      },
+    });
+  });
+
+  $("#download-internal-link-analysis").on("click", function (e) {
+    e.preventDefault();
+    downloadDiagram("png", "internal-link-analysis");
+  });
+
+  $("#download-internal-link-analysis-svg").on("click", function (e) {
+    e.preventDefault();
+    downloadDiagram("svg", "internal-link-analysis");
+  });
+
+  function downloadDiagram(format, diagramType) {
+    var $diagram =
+      diagramType === "content-relationship-map"
+        ? $("#content-relationship-map svg")
+        : $("#internal-link-analysis-results svg");
+
+    if ($diagram.length) {
+      var svgData = new XMLSerializer().serializeToString($diagram[0]);
+      if (format === "svg") {
+        var blob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+        saveAs(blob, diagramType + ".svg");
+      } else {
+        var canvas = document.createElement("canvas");
+        var ctx = canvas.getContext("2d");
+        var img = new Image();
+        img.onload = function () {
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx.drawImage(img, 0, 0);
+          canvas.toBlob(function (blob) {
+            saveAs(blob, diagramType + ".png");
+          });
+        };
+        img.src =
+          "data:image/svg+xml;base64," +
+          btoa(unescape(encodeURIComponent(svgData)));
+      }
+    } else {
+      alert("No diagram to download. Please generate a diagram first.");
     }
   }
 
