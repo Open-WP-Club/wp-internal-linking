@@ -24,11 +24,7 @@ jQuery(document).ready(function ($) {
 
   // Load saved internal link analysis if it exists
   if (internalLinkAnalysisData) {
-    renderInternalLinkAnalysis();
-    $("#analyze-internal-links").text("Update Analysis");
-    $(
-      "#delete-internal-link-analysis, #download-internal-link-analysis, #download-internal-link-analysis-svg"
-    ).show();
+    initializeInternalLinkAnalysis();
   }
 
   $("#generate-diagram").on("click", function (e) {
@@ -178,6 +174,14 @@ jQuery(document).ready(function ($) {
       },
     });
   });
+
+  function initializeInternalLinkAnalysis() {
+    renderInternalLinkAnalysis();
+    $("#analyze-internal-links").text("Update Analysis");
+    $(
+      "#delete-internal-link-analysis, #download-internal-link-analysis, #download-internal-link-analysis-svg"
+    ).show();
+  }
 
   function renderInternalLinkAnalysis() {
     var $results = $("#internal-link-analysis-results");

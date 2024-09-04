@@ -3,7 +3,7 @@
  * Plugin Name:             WordPress Internal Linking
  * Plugin URI:              https://github.com/Open-WP-Club/wp-internal-linking
  * Description:             A plugin to manage and analyze internal linking in WordPress
- * Version:                 0.0.2
+ * Version:                 0.0.3
  * Author:                  Gabriel Kanev
  * Author URI:              https://gkanev.com
  * License:                 GPL-2.0 License
@@ -34,6 +34,7 @@ class Internal_Linking
         add_action('wp_ajax_delete_content_relationship_map', array($this, 'delete_content_relationship_map'));
         add_action('wp_ajax_analyze_all_content', array($this, 'analyze_all_content'));
         add_action('wp_ajax_analyze_internal_links', array($this, 'analyze_internal_links'));
+        add_action('wp_ajax_delete_internal_link_analysis', array($this, 'delete_internal_link_analysis'));
 
         $this->options = get_option('internal_linking_options');
         $this->blacklist = $this->get_blacklist();
@@ -54,7 +55,7 @@ class Internal_Linking
 
     public function create_main_page()
     {
-    ?>
+?>
         <div class="wrap">
             <h1>Internal Linking</h1>
             <h2 class="nav-tab-wrapper">
@@ -141,7 +142,7 @@ class Internal_Linking
                 </tbody>
             </table>
         </div>
-        
+
         <div class="internal-linking-section">
             <h3>Manage Blacklist</h3>
             <div id="blacklist-manager">
@@ -209,10 +210,15 @@ class Internal_Linking
         <div class="internal-linking-section">
             <h3>Internal Link Analysis</h3>
             <p>Analyze existing internal links in your posts, pages, and other content types.</p>
-            <button id="analyze-internal-links" class="button button-primary">Analyze Internal Links</button>
-            <div id="internal-link-analysis-results"></div>
+            <div id="internal-link-analysis-results" data-saved-analysis="<?php echo esc_attr($saved_analysis ? 'true' : 'false'); ?>"></div>
+            <div class="button-group">
+                <button id="analyze-internal-links" class="button button-primary"><?php echo $saved_analysis ? 'Update Analysis' : 'Analyze Internal Links'; ?></button>
+                <button id="delete-internal-link-analysis" class="button" <?php echo $saved_analysis ? '' : 'style="display:none;"'; ?>>Delete Analysis</button>
+                <button id="download-internal-link-analysis" class="button" <?php echo $saved_analysis ? '' : 'style="display:none;"'; ?>>Download as PNG</button>
+                <button id="download-internal-link-analysis-svg" class="button" <?php echo $saved_analysis ? '' : 'style="display:none;"'; ?>>Download as SVG</button>
+            </div>
         </div>
-    <?php
+<?php
     }
 
     public function page_init()
@@ -239,7 +245,8 @@ class Internal_Linking
             wp_enqueue_script('internal-linking-diagram', plugins_url('js/diagram.js', __FILE__), array('jquery', 'mermaid', 'file-saver'), '1.0', true);
             wp_localize_script('internal-linking-admin', 'ailAjax', array(
                 'ajaxurl' => admin_url('admin-ajax.php'),
-                'savedDiagram' => get_option('internal_linking_diagram', '')
+                'savedDiagram' => get_option('internal_linking_diagram', ''),
+                'savedInternalLinkAnalysis' => get_option('internal_linking_analysis_diagram', '')
             ));
         }
     }
@@ -257,8 +264,8 @@ class Internal_Linking
     {
         $page = isset($_GET['blacklist_page']) ? intval($_GET['blacklist_page']) : 1;
         $search = isset($_GET['blacklist_search']) ? sanitize_text_field($_GET['blacklist_search']) : '';
-        
-        $filtered_blacklist = array_filter($this->blacklist, function($word) use ($search) {
+
+        $filtered_blacklist = array_filter($this->blacklist, function ($word) use ($search) {
             return empty($search) || stripos($word, $search) !== false;
         });
 
@@ -283,8 +290,8 @@ class Internal_Linking
     {
         $page = isset($_GET['blacklist_page']) ? intval($_GET['blacklist_page']) : 1;
         $search = isset($_GET['blacklist_search']) ? sanitize_text_field($_GET['blacklist_search']) : '';
-        
-        $filtered_blacklist = array_filter($this->blacklist, function($word) use ($search) {
+
+        $filtered_blacklist = array_filter($this->blacklist, function ($word) use ($search) {
             return empty($search) || stripos($word, $search) !== false;
         });
 
@@ -511,21 +518,6 @@ class Internal_Linking
         wp_send_json_success();
     }
 
-    private function escape_mermaid_label($text)
-    {
-        // Remove HTML entities
-        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        // Remove any characters that might interfere with Mermaid syntax
-        $text = preg_replace('/[\\\\\'\"]/u', '', $text);
-        // Limit length to prevent overly long labels
-        $text = mb_substr($text, 0, 30);
-        if (mb_strlen($text) >= 30) {
-            $text .= '...';
-        }
-        // Ensure the label is not empty
-        return !empty($text) ? $text : 'Unnamed';
-    }
-
     public function analyze_internal_links()
     {
         if (!current_user_can('manage_options')) {
@@ -571,7 +563,18 @@ class Internal_Linking
         wp_reset_postdata();
 
         $diagram = $this->generate_internal_link_diagram($link_data);
+        update_option('internal_linking_analysis_diagram', $diagram);
         wp_send_json_success($diagram);
+    }
+
+    public function delete_internal_link_analysis()
+    {
+        if (!current_user_can('manage_options')) {
+            wp_die('Unauthorized user');
+        }
+
+        delete_option('internal_linking_analysis_diagram');
+        wp_send_json_success();
     }
 
     private function generate_internal_link_diagram($link_data)
@@ -603,6 +606,21 @@ class Internal_Linking
         $diagram .= implode("", array_unique($connections));
 
         return $diagram;
+    }
+
+    private function escape_mermaid_label($text)
+    {
+        // Remove HTML entities
+        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        // Remove any characters that might interfere with Mermaid syntax
+        $text = preg_replace('/[\\\\\'\"]/u', '', $text);
+        // Limit length to prevent overly long labels
+        $text = mb_substr($text, 0, 30);
+        if (mb_strlen($text) >= 30) {
+            $text .= '...';
+        }
+        // Ensure the label is not empty
+        return !empty($text) ? $text : 'Unnamed';
     }
 
     public function add_ajax_handlers()
@@ -654,7 +672,7 @@ class Internal_Linking
         $search = isset($_POST['search']) ? sanitize_text_field($_POST['search']) : '';
         $page = isset($_POST['page']) ? intval($_POST['page']) : 1;
 
-        $filtered_blacklist = array_filter($this->blacklist, function($word) use ($search) {
+        $filtered_blacklist = array_filter($this->blacklist, function ($word) use ($search) {
             return empty($search) || stripos($word, $search) !== false;
         });
 
