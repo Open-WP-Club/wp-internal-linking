@@ -10,7 +10,7 @@
  * Requires Plugins:        
  * Requires at least:       6.0
  * Requires PHP:            7.4
- * Tested up to:            6.6.1
+ * Tested up to:            7.1.4
  */
 
 // Don't allow direct access to the plugin file
